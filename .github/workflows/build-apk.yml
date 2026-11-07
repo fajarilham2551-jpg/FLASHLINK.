@@ -1,13 +1,16 @@
+
 name: Build FLASHLINK APK
 
 on:
   workflow_dispatch:
   push:
-    branches: ["main"]
+    branches:
+      - main
 
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout source
         uses: actions/checkout@v4
@@ -16,18 +19,43 @@ jobs:
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: 17
+          java-version: '17'
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
-          gradle-version: "8.9"
+          gradle-version: '8.9'
+
+      - name: Extract project ZIP
+        run: |
+          unzip -o FLASHLINK_READY_TO_BUILD.zip -d extracted
+
+      - name: Find project
+        id: project
+        run: |
+          FILE=$(find extracted -name settings.gradle -o -name settings.gradle.kts | head -n 1)
+          if [ -z "$FILE" ]; then
+            echo "Gradle project tidak ditemukan dalam ZIP!"
+            exit 1
+          fi
+          DIR=$(dirname "$FILE")
+          echo "dir=$DIR" >> "$GITHUB_OUTPUT"
 
       - name: Build APK
-        run: gradle --no-daemon assembleDebug
+        run: |
+          gradle --no-daemon -p "${{ steps.project.outputs.dir }}" assembleDebug
+
+      - name: Prepare APK
+        run: |
+          APK=$(find extracted -path '*/build/outputs/apk/debug/app-debug.apk' | head -n 1)
+          if [ -z "$APK" ]; then
+            echo "APK tidak ditemukan!"
+            exit 1
+          fi
+          cp "$APK" FLASHLINK-debug.apk
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: FLASHLINK-debug-apk
-          path: app/build/outputs/apk/debug/app-debug.apk
+          path: FLASHLINK-debug.apk
